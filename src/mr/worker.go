@@ -4,8 +4,9 @@ import "fmt"
 import "log"
 import "net/rpc"
 import "hash/fnv"
-
-
+import "os"
+import "io/ioutil"
+import "strings"
 //
 // Map functions return a slice of KeyValue.
 //
@@ -28,14 +29,13 @@ func ihash(key string) int {
 //
 // main/mrworker.go calls this function.
 //
-func Worker(mapf func(string, string) []KeyValue,
-	reducef func(string, []string) string) {
+func Worker(mapf func(string, string) []KeyValue,reducef func(string, []string) string) {
 
 	// Your worker implementation here.
 
 	// uncomment to send the Example RPC to the master.
 	// CallExample()
-
+	applyTask(mapf, reducef)
 }
 
 //
@@ -59,6 +59,48 @@ func CallExample() {
 
 	// reply.Y should be 100.
 	fmt.Printf("reply.Y %v\n", reply.Y)
+}
+
+func applyTask(mapf func(string, string) []KeyValue,reducef func(string, []string) string){
+	args := ExampleArgs{}
+	args.X = 99
+	reply := Task{}
+	call("Master.AssignTask", &args, &reply)
+	if reply.TaskType==0{  //map task
+
+		mapWork(reply, mapf)
+
+
+	}else{ // reduce task
+
+	}
+
+}
+
+func mapWork(task Task, mapf func(string, string) []KeyValue){
+
+	filename := task.FileName
+	file, err := os.Open(filename)
+	intermediate := []KeyValue{}
+	if err != nil {
+		log.Fatalf("cannot open %v", filename)
+	}
+	content, err := ioutil.ReadAll(file)
+	if err != nil {
+		log.Fatalf("cannot read %v", filename)
+	}
+	file.Close()
+	kva := mapf(filename, string(content))
+	intermediate = append(intermediate, kva...)
+
+	outputfiles := make([]*os.File,task.Nreduce)
+	prefix := strings.Split(filename, ".txt")[0]
+	tempFileName := prefix+"-*.txt"
+	for i:=0;i<task.Nreduce;i++{
+		outputfiles[i] ,err = ioutil.TempFile("mr-tmp",tempFileName)
+
+	}
+
 }
 
 //

@@ -1,15 +1,48 @@
 package mr
 
-import "log"
-import "net"
-import "os"
-import "net/rpc"
-import "net/http"
-
+import (
+	"log"
+	"net"
+	"net/http"
+	"net/rpc"
+	"os"
+	"plugin"
+	"time"
+	"sync"
+)
 
 type Master struct {
 	// Your definitions here.
+	taskLock sync.Mutex
+	taskQueue []Task
+}
 
+type Task struct {
+	TaskType     int //0 map, 1 reduce
+	FileName     string
+	Assigned     bool
+	Completed    bool
+	Nreduce		 int
+	AssignedTime time.Time
+}
+
+func loadPlugin(filename string) (func(string, string) []KeyValue, func(string, []string) string) {
+	p, err := plugin.Open(filename)
+	if err != nil {
+		log.Fatalf("cannot load plugin %v", filename)
+	}
+	xmapf, err := p.Lookup("Map")
+	if err != nil {
+		log.Fatalf("cannot find Map in %v", filename)
+	}
+	mapf := xmapf.(func(string, string) []KeyValue)
+	xreducef, err := p.Lookup("Reduce")
+	if err != nil {
+		log.Fatalf("cannot find Reduce in %v", filename)
+	}
+	reducef := xreducef.(func(string, []string) string)
+
+	return mapf, reducef
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -24,6 +57,27 @@ func (m *Master) Example(args *ExampleArgs, reply *ExampleReply) error {
 	return nil
 }
 
+func (m *Master) AssignTask(args *ExampleArgs, task *Task) error {
+	m.taskLock.Lock()
+	i := 0
+	for {
+		if m.taskQueue[i].Assigned == false {
+			break
+		} else {
+			i++
+		}
+	}
+	m.taskQueue[i].Assigned = true
+	m.taskQueue[i].AssignedTime = time.Now()
+	task.FileName = m.taskQueue[i].FileName
+	task.Assigned = m.taskQueue[i].Assigned
+	task.TaskType = m.taskQueue[i].TaskType
+	task.Completed = m.taskQueue[i].Completed
+	task.AssignedTime = m.taskQueue[i].AssignedTime
+	m.taskLock.Unlock()
+
+	return nil
+}
 
 //
 // start a thread that listens for RPCs from worker.go
@@ -50,7 +104,6 @@ func (m *Master) Done() bool {
 
 	// Your code here.
 
-
 	return ret
 }
 
@@ -61,9 +114,10 @@ func (m *Master) Done() bool {
 //
 func MakeMaster(files []string, nReduce int) *Master {
 	m := Master{}
-
-	// Your code here.
-
+	for _, value := range files {
+		task := Task{0, value, false, false, nReduce, time.Now()}
+		m.taskQueue = append(m.taskQueue, task)
+	}
 
 	m.server()
 	return &m
