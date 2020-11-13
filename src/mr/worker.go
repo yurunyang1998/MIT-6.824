@@ -1,12 +1,17 @@
 package mr
 
-import "fmt"
-import "log"
-import "net/rpc"
-import "hash/fnv"
-import "os"
-import "io/ioutil"
-import "strings"
+import (
+	"fmt"
+	"hash/fnv"
+	"io/ioutil"
+	"log"
+	"net/rpc"
+	"os"
+	"strconv"
+	"strings"
+	"encoding/json"
+)
+
 //
 // Map functions return a slice of KeyValue.
 //
@@ -25,11 +30,10 @@ func ihash(key string) int {
 	return int(h.Sum32() & 0x7fffffff)
 }
 
-
 //
 // main/mrworker.go calls this function.
 //
-func Worker(mapf func(string, string) []KeyValue,reducef func(string, []string) string) {
+func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string) string) {
 
 	// Your worker implementation here.
 
@@ -61,23 +65,23 @@ func CallExample() {
 	fmt.Printf("reply.Y %v\n", reply.Y)
 }
 
-func applyTask(mapf func(string, string) []KeyValue,reducef func(string, []string) string){
+func applyTask(mapf func(string, string) []KeyValue, reducef func(string, []string) string) {
 	args := ExampleArgs{}
 	args.X = 99
 	reply := Task{}
 	call("Master.AssignTask", &args, &reply)
-	if reply.TaskType==0{  //map task
+	if reply.TaskType == 0 { //map task
 
 		mapWork(reply, mapf)
+		// fmt.Println(reply)
 
-
-	}else{ // reduce task
+	} else { // reduce task
 
 	}
 
 }
 
-func mapWork(task Task, mapf func(string, string) []KeyValue){
+func mapWork(task Task, mapf func(string, string) []KeyValue) {
 
 	filename := task.FileName
 	file, err := os.Open(filename)
@@ -93,14 +97,27 @@ func mapWork(task Task, mapf func(string, string) []KeyValue){
 	kva := mapf(filename, string(content))
 	intermediate = append(intermediate, kva...)
 
-	outputfiles := make([]*os.File,task.Nreduce)
+	outputfiles := make([]*os.File, task.Nreduce)
+	encoders := make([]*json.Encoder, task.Nreduce)
 	prefix := strings.Split(filename, ".txt")[0]
-	tempFileName := prefix+"-*.txt"
-	for i:=0;i<task.Nreduce;i++{
-		outputfiles[i] ,err = ioutil.TempFile("mr-tmp",tempFileName)
 
+	for i:=0;i<task.Nreduce;i++{
+		tempFileName := prefix + "_" + strconv.Itoa(i)
+		outputfiles[i], err = os.Create("./mr-tmp/"+tempFileName)
+		encoders[i] = json.NewEncoder(outputfiles[i])
 	}
 
+
+	for _, kv := range intermediate {
+		index := ihash(kv.Key)%task.Nreduce
+		encoders[index].Encode(kv)
+	}
+
+
+
+	for i := 0; i < task.Nreduce; i++ {
+		outputfiles[i].Close()
+	}
 }
 
 //

@@ -74,6 +74,7 @@ func (m *Master) AssignTask(args *ExampleArgs, task *Task) error {
 	task.TaskType = m.taskQueue[i].TaskType
 	task.Completed = m.taskQueue[i].Completed
 	task.AssignedTime = m.taskQueue[i].AssignedTime
+	task.Nreduce = m.taskQueue[i].Nreduce
 	m.taskLock.Unlock()
 
 	return nil
