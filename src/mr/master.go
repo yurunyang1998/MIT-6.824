@@ -15,6 +15,8 @@ type Master struct {
 	// Your definitions here.
 	taskLock sync.Mutex
 	taskQueue []Task
+	reduceQueue []Task
+	reduceIndex int
 }
 
 type Task struct {
@@ -52,9 +54,20 @@ func loadPlugin(filename string) (func(string, string) []KeyValue, func(string, 
 //
 // the RPC argument and reply types are defined in rpc.go.
 //
-func (m *Master) Example(args *ExampleArgs, reply *ExampleReply) error {
-	reply.Y = args.X + 1
-	return nil
+
+
+func (m *Master) Complete(args ExampleArgs, reply * ExampleReply){
+	for index, value := range(m.taskQueue){
+		if value.FileName == args.FileName{
+			m.taskQueue[index].Completed = true
+			reduceTask := Task{1,value.FileName, false, false, m.reduceIndex, time.Now()}
+			m.reduceQueue = append(m.reduceQueue, reduceTask)
+			break
+		}
+
+	}
+
+
 }
 
 func (m *Master) AssignTask(args *ExampleArgs, task *Task) error {
