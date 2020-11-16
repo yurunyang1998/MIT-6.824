@@ -56,15 +56,15 @@ func loadPlugin(filename string) (func(string, string) []KeyValue, func(string, 
 //
 
 
-func (m *Master) Complete(args ExampleArgs, reply * ExampleReply){
+func (m *Master) CompleteMap(args ExampleArgs, reply * ExampleReply){
 	for index, value := range(m.taskQueue){
 		if value.FileName == args.FileName{
 			m.taskQueue[index].Completed = true
 			reduceTask := Task{1,value.FileName, false, false, m.reduceIndex, time.Now()}
 			m.reduceQueue = append(m.reduceQueue, reduceTask)
+			m.reduceIndex++;
 			break
 		}
-
 	}
 
 
@@ -72,23 +72,37 @@ func (m *Master) Complete(args ExampleArgs, reply * ExampleReply){
 
 func (m *Master) AssignTask(args *ExampleArgs, task *Task) error {
 	m.taskLock.Lock()
-	i := 0
-	for {
+	for i := range(m.taskQueue) {
 		if m.taskQueue[i].Assigned == false {
-			break
-		} else {
-			i++
+			m.taskQueue[i].Assigned = true
+			m.taskQueue[i].AssignedTime = time.Now()
+			task.FileName = m.taskQueue[i].FileName
+			task.Assigned = m.taskQueue[i].Assigned
+			task.TaskType = m.taskQueue[i].TaskType
+			task.Completed = m.taskQueue[i].Completed
+			task.AssignedTime = m.taskQueue[i].AssignedTime
+			task.Nreduce = m.taskQueue[i].Nreduce
+			m.taskLock.Unlock()
+			return nil
 		}
 	}
-	m.taskQueue[i].Assigned = true
-	m.taskQueue[i].AssignedTime = time.Now()
-	task.FileName = m.taskQueue[i].FileName
-	task.Assigned = m.taskQueue[i].Assigned
-	task.TaskType = m.taskQueue[i].TaskType
-	task.Completed = m.taskQueue[i].Completed
-	task.AssignedTime = m.taskQueue[i].AssignedTime
-	task.Nreduce = m.taskQueue[i].Nreduce
-	m.taskLock.Unlock()
+	for _, rdtask:=range(m.reduceQueue){
+
+		if rdtask.Assigned == false{
+
+			task.FileName = rdtask.FileName
+			task.Assigned = rdtask.Assigned
+			task.TaskType = rdtask.TaskType
+			task.Completed = rdtask.Completed
+			task.AssignedTime = rdtask.AssignedTime
+			task.Nreduce = rdtask.Nreduce
+			m.taskLock.Unlock()
+			return nil
+		}
+
+
+	}
+
 
 	return nil
 }
@@ -128,6 +142,7 @@ func (m *Master) Done() bool {
 //
 func MakeMaster(files []string, nReduce int) *Master {
 	m := Master{}
+	m.reduceIndex = 0
 	for _, value := range files {
 		task := Task{0, value, false, false, nReduce, time.Now()}
 		m.taskQueue = append(m.taskQueue, task)

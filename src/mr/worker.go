@@ -53,7 +53,6 @@ func CallExample() {
 	args := ExampleArgs{}
 
 	// fill in the argument(s).
-	args.X = 99
 
 	// declare a reply structure.
 	reply := ExampleReply{}
@@ -67,7 +66,6 @@ func CallExample() {
 
 func applyTask(mapf func(string, string) []KeyValue, reducef func(string, []string) string) {
 	args := ExampleArgs{}
-	args.X = 99
 	reply := Task{}
 	call("Master.AssignTask", &args, &reply)
 	if reply.TaskType == 0 { //map task
@@ -77,9 +75,65 @@ func applyTask(mapf func(string, string) []KeyValue, reducef func(string, []stri
 
 	} else { // reduce task
 
+
+
+
 	}
 
 }
+
+func reduceWork(task Task, redf func(string, []string) string){
+
+
+	filesnames, err := ioutil.ReadDir("./mr-tmp/")
+	if(err!=nil){
+		fmt.Println(err)
+	}
+	targetFiles := make([]string, 10)
+	for _, file := range(filesnames){
+		index, _ := strconv.Atoi(strings.Split(file.Name(), "_")[1])
+		if(index == task.Nreduce){
+			targetFiles = append(targetFiles, file.Name())
+		}
+	}
+
+	for file := range(targetFiles){
+		fmt.Println(file)
+	}
+
+
+	// sort.Sort(ByKey(intermediate))
+
+	// oname := "mr-out-0"
+	// ofile, _ := os.Create(oname)
+
+	// //
+	// // call Reduce on each distinct key in intermediate[],
+	// // and print the result to mr-out-0.
+	// //
+	// i := 0
+	// for i < len(intermediate) {
+	// 	j := i + 1
+	// 	for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key {
+	// 		j++
+	// 	}
+	// 	values := []string{}
+	// 	for k := i; k < j; k++ {
+	// 		values = append(values, intermediate[k].Value)
+	// 	}
+	// 	output := reducef(intermediate[i].Key, values)
+
+	// 	// this is the correct format for each line of Reduce output.
+	// 	fmt.Fprintf(ofile, "%v %v\n", intermediate[i].Key, output)
+
+	// 	i = j
+	// }
+
+
+
+
+}
+
 
 func mapWork(task Task, mapf func(string, string) []KeyValue) {
 
