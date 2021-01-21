@@ -43,6 +43,11 @@ type ApplyMsg struct {
 	CommandIndex int
 }
 
+type logentry struct{
+	term int
+	command string
+}
+
 //
 // A Go object implementing a single Raft peer.
 //
@@ -56,6 +61,17 @@ type Raft struct {
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
+
+	state int // 0 leader, 1 follower, 2 candidate
+	currentTerm  int
+	nextIndex []int
+	voted bool
+	log []logentry
+	
+	electionTimeOutCheck chan;
+	
+	
+
 
 }
 
@@ -215,6 +231,13 @@ func (rf *Raft) killed() bool {
 	return z == 1
 }
 
+func (rf *Raft) eventloop() bool {
+
+
+
+}
+
+
 //
 // the service or tester wants to create a Raft server. the ports
 // of all the Raft servers (including this one) are in peers[]. this
@@ -234,7 +257,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.me = me
 
 	// Your initialization code here (2A, 2B, 2C).
-
+	rf.state = 1
+	
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
