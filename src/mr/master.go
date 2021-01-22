@@ -1,6 +1,8 @@
 package mr
 
-import "log"
+import (
+	"log"
+)
 import "net"
 import "os"
 import "net/rpc"
@@ -9,6 +11,10 @@ import "net/http"
 
 type Master struct {
 	// Your definitions here.
+
+}
+
+type Task interface {
 
 }
 
@@ -63,6 +69,7 @@ func MakeMaster(files []string, nReduce int) *Master {
 	m := Master{}
 
 	// Your code here.
+
 
 
 	m.server()
