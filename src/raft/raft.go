@@ -1,7 +1,12 @@
 package raft
 
 import (
+	"math/rand"
+	"sync"
+	"sync/atomic"
 	"time"
+
+	"../labrpc"
 )
 
 //
@@ -21,14 +26,8 @@ import (
 //   in the same server.
 //
 
-import "sync"
-import "sync/atomic"
-import "../labrpc"
-
 // import "bytes"
 // import "../labgob"
-
-
 
 //
 // as each Raft peer becomes aware that successive log entries are
@@ -47,8 +46,8 @@ type ApplyMsg struct {
 	CommandIndex int
 }
 
-type logentry struct{
-	term int
+type logentry struct {
+	term    int
 	command string
 }
 
@@ -66,18 +65,16 @@ type Raft struct {
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 
-	state int // 0 leader, 1 follower, 2 candidate
-	currentTerm  int
-	nextIndex []int
-	voted bool
-	log []logentry
-	lastBeatHeartTime time
-	electionTimeOutCheckChannel chan
-
-
-
-
-
+	State       int // 0 leader, 1 follower, 2 candidate
+	CurrentTerm int
+	//serversNum                 int
+	NextIndex                   []int
+	Voted                       bool
+	Log                         []logentry
+	LastBeatHeartTime           int64
+	ElectionTimeout             int64
+	ElectionTimeOutCheckChannel chan bool
+	AppendEntryChannel          chan bool
 }
 
 // return currentTerm and whether this server
@@ -106,7 +103,6 @@ func (rf *Raft) persist() {
 	// rf.persister.SaveRaftState(data)
 }
 
-
 //
 // restore previously persisted state.
 //
@@ -128,9 +124,6 @@ func (rf *Raft) readPersist(data []byte) {
 	//   rf.yyy = yyy
 	// }
 }
-
-
-
 
 //
 // example RequestVote RPC arguments structure.
@@ -189,7 +182,6 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 	return ok
 }
 
-
 //
 // the service using Raft (e.g. a k/v server) wants to start
 // agreement on the next command to be appended to Raft's log. if this
@@ -210,7 +202,6 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	isLeader := true
 
 	// Your code here (2B).
-
 
 	return index, term, isLeader
 }
@@ -237,51 +228,74 @@ func (rf *Raft) killed() bool {
 }
 
 func (rf *Raft) eventloop() bool {
-	for{
-		select{
-		case rst<-rf.electionTimeOutCheckChannel:
+	for {
+		select {
+		case rst <- rf.electionTimeOutCheckChannel:
+			{
+
+			}
+		case rst <- rf.AppendEntryChannel:
 			{
 
 			}
 		}
 	}
 
-
 }
-
 
 // My code
 
 func (rf *Raft) electionTimeOutCheck() {
 	go func() {
-		for{
-			now := time.Now.UnixNano/1e6
-			elaspe :=now.Sub(rf.lastBeatHeartTime)
+		for {
+			now := time.Now.UnixNano()
+			elaspe := (rf.lastBeatHeartTime - now) / int64(time.Millisecond)
+			if elaspe > rf.reelectionTime {
+				//TODO:重新选举
+				rf.electionTimeOutCheckChannel <- true
+			}
 		}
-
-
 
 	}()
 
+}
+
+func setElectionTimeout() int {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	randomTime := r.Intn(150) + 150
+	return randomTime
+}
+
+func (rf *Raft) initialization() {
+
+	rf.State = 1 //follower
+	rf.CurrentTerm = 0
+	// rf.NextIndex
+	rf.Voted = 0
+	// rf.Log
+	rf.LastBeatHeartTime = 0
+	rf.ElectionTimeout = setElectionTimeout()          //TODO: add a function to create random time
+	rf.ElectionTimeOutCheckChannel = make(chan int, 1) // TODO : I don't know  if the channel should have buffer
 
 }
 
+func (rf *Raft) convert2Leader() {
+	rf.State = 0
+	rf.CurrentTerm++
+	rf.Voted = 0
+	rf.LastBeatHeartTime = 0
+	rf.ElectionTimeout = setElectionTimeout()
+}
 
+func (rf *Raft) convert2Candidate() {
 
+}
 
+func (rf *Raft) convert2Follower() {
 
-
-
+}
 
 //
-
-
-
-
-
-
-
-
 
 //
 // the service or tester wants to create a Raft server. the ports
@@ -303,11 +317,9 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.me = me
 
 	// Your initialization code here (2A, 2B, 2C).
-	rf.state = 1
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
-
 
 	return rf
 }

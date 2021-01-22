@@ -2,28 +2,19 @@ package mr
 
 import (
 	"log"
-<<<<<<< HEAD
-)
-import "net"
-import "os"
-import "net/rpc"
-import "net/http"
-
-=======
 	"net"
 	"net/http"
 	"net/rpc"
 	"os"
 	"plugin"
-	"time"
 	"sync"
+	"time"
 )
->>>>>>> 523f3a8ac43a4c1e6e943d61744b9e76d03fd16c
 
 type Master struct {
 	// Your definitions here.
-	taskLock sync.Mutex
-	taskQueue []Task
+	taskLock    sync.Mutex
+	taskQueue   []Task
 	reduceQueue []Task
 	reduceIndex int
 }
@@ -33,7 +24,7 @@ type Task struct {
 	FileName     string
 	Assigned     bool
 	Completed    bool
-	Nreduce		 int
+	Nreduce      int
 	AssignedTime time.Time
 }
 
@@ -57,7 +48,6 @@ func loadPlugin(filename string) (func(string, string) []KeyValue, func(string, 
 }
 
 type Task interface {
-
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -68,24 +58,22 @@ type Task interface {
 // the RPC argument and reply types are defined in rpc.go.
 //
 
-
-func (m *Master) CompleteMap(args ExampleArgs, reply * ExampleReply){
-	for index, value := range(m.taskQueue){
-		if value.FileName == args.FileName{
+func (m *Master) CompleteMap(args ExampleArgs, reply *ExampleReply) {
+	for index, value := range m.taskQueue {
+		if value.FileName == args.FileName {
 			m.taskQueue[index].Completed = true
-			reduceTask := Task{1,value.FileName, false, false, m.reduceIndex, time.Now()}
+			reduceTask := Task{1, value.FileName, false, false, m.reduceIndex, time.Now()}
 			m.reduceQueue = append(m.reduceQueue, reduceTask)
-			m.reduceIndex++;
+			m.reduceIndex++
 			break
 		}
 	}
-
 
 }
 
 func (m *Master) AssignTask(args *ExampleArgs, task *Task) error {
 	m.taskLock.Lock()
-	for i := range(m.taskQueue) {
+	for i := range m.taskQueue {
 		if m.taskQueue[i].Assigned == false {
 			m.taskQueue[i].Assigned = true
 			m.taskQueue[i].AssignedTime = time.Now()
@@ -99,9 +87,9 @@ func (m *Master) AssignTask(args *ExampleArgs, task *Task) error {
 			return nil
 		}
 	}
-	for _, rdtask:=range(m.reduceQueue){
+	for _, rdtask := range m.reduceQueue {
 
-		if rdtask.Assigned == false{
+		if rdtask.Assigned == false {
 
 			task.FileName = rdtask.FileName
 			task.Assigned = rdtask.Assigned
@@ -113,9 +101,7 @@ func (m *Master) AssignTask(args *ExampleArgs, task *Task) error {
 			return nil
 		}
 
-
 	}
-
 
 	return nil
 }
@@ -160,7 +146,6 @@ func MakeMaster(files []string, nReduce int) *Master {
 		task := Task{0, value, false, false, nReduce, time.Now()}
 		m.taskQueue = append(m.taskQueue, task)
 	}
-
 
 	m.server()
 	return &m

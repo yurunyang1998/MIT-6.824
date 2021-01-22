@@ -1,15 +1,28 @@
 package main
-import(
-    "time"
-    "fmt"
+
+import (
+	"fmt"
+	"math/rand"
+	"time"
 )
 
-func main() {
-    now := time.Now()
-    for i:=0;i<100300;i++{
+type test struct {
+	channel chan int
+}
 
-    }
-    lastBeatHeartTime := time.Now()
-    elaspe := now.Sub(lastBeatHeartTime()
-    fmt.Printf("%d",elaspe.Milliseconds)
+func main() {
+	now := time.Now().UnixNano()
+	for i := 0; i < 10032; i++ {
+		// fmt.Print("H")
+	}
+	lastBeatHeartTime := time.Now().UnixNano()
+	elaspe := (lastBeatHeartTime - now) / int64(time.Millisecond)
+	fmt.Println(elaspe, int64(time.Millisecond))
+	fmt.Printf("%T", now)
+
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for i := 0; i < 10; i++ {
+		fmt.Println(r.Intn(150) + 150)
+	}
+
 }
