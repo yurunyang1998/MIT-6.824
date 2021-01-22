@@ -1,5 +1,9 @@
 package raft
 
+import (
+	"time"
+)
+
 //
 // this is an outline of the API that raft must expose to
 // the service (or tester). see comments below for
@@ -67,10 +71,11 @@ type Raft struct {
 	nextIndex []int
 	voted bool
 	log []logentry
-	
-	electionTimeOutCheck chan;
-	
-	
+	lastBeatHeartTime time
+	electionTimeOutCheckChannel chan
+
+
+
 
 
 }
@@ -232,10 +237,50 @@ func (rf *Raft) killed() bool {
 }
 
 func (rf *Raft) eventloop() bool {
+	for{
+		select{
+		case rst<-rf.electionTimeOutCheckChannel:
+			{
 
+			}
+		}
+	}
 
 
 }
+
+
+// My code
+
+func (rf *Raft) electionTimeOutCheck() {
+	go func() {
+		for{
+			now := time.Now.UnixNano/1e6
+			elaspe :=now.Sub(rf.lastBeatHeartTime)
+		}
+
+
+
+	}()
+
+
+}
+
+
+
+
+
+
+
+
+//
+
+
+
+
+
+
+
 
 
 //
@@ -249,6 +294,7 @@ func (rf *Raft) eventloop() bool {
 // Make() must return quickly, so it should start goroutines
 // for any long-running work.
 //
+
 func Make(peers []*labrpc.ClientEnd, me int,
 	persister *Persister, applyCh chan ApplyMsg) *Raft {
 	rf := &Raft{}
@@ -258,7 +304,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	// Your initialization code here (2A, 2B, 2C).
 	rf.state = 1
-	
+
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
