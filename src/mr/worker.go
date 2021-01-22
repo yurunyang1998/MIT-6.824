@@ -1,10 +1,16 @@
 package mr
 
-import "fmt"
-import "log"
-import "net/rpc"
-import "hash/fnv"
-
+import (
+	"fmt"
+	"hash/fnv"
+	"io/ioutil"
+	"log"
+	"net/rpc"
+	"os"
+	"strconv"
+	"strings"
+	"encoding/json"
+)
 
 //
 // Map functions return a slice of KeyValue.
@@ -24,18 +30,16 @@ func ihash(key string) int {
 	return int(h.Sum32() & 0x7fffffff)
 }
 
-
 //
 // main/mrworker.go calls this function.
 //
-func Worker(mapf func(string, string) []KeyValue,
-	reducef func(string, []string) string) {
+func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string) string) {
 
 	// Your worker implementation here.
 
 	// uncomment to send the Example RPC to the master.
 	// CallExample()
-
+	applyTask(mapf, reducef)
 }
 
 //
@@ -49,7 +53,6 @@ func CallExample() {
 	args := ExampleArgs{}
 
 	// fill in the argument(s).
-	args.X = 99
 
 	// declare a reply structure.
 	reply := ExampleReply{}
@@ -59,6 +62,116 @@ func CallExample() {
 
 	// reply.Y should be 100.
 	fmt.Printf("reply.Y %v\n", reply.Y)
+}
+
+func applyTask(mapf func(string, string) []KeyValue, reducef func(string, []string) string) {
+	args := ExampleArgs{}
+	reply := Task{}
+	call("Master.AssignTask", &args, &reply)
+	if reply.TaskType == 0 { //map task
+
+		mapWork(reply, mapf)
+		// fmt.Println(reply)
+
+	} else { // reduce task
+
+
+
+
+	}
+
+}
+
+func reduceWork(task Task, redf func(string, []string) string){
+
+
+	filesnames, err := ioutil.ReadDir("./mr-tmp/")
+	if(err!=nil){
+		fmt.Println(err)
+	}
+	targetFiles := make([]string, 10)
+	for _, file := range(filesnames){
+		index, _ := strconv.Atoi(strings.Split(file.Name(), "_")[1])
+		if(index == task.Nreduce){
+			targetFiles = append(targetFiles, file.Name())
+		}
+	}
+
+	for file := range(targetFiles){
+		fmt.Println(file)
+	}
+
+
+	// sort.Sort(ByKey(intermediate))
+
+	// oname := "mr-out-0"
+	// ofile, _ := os.Create(oname)
+
+	// //
+	// // call Reduce on each distinct key in intermediate[],
+	// // and print the result to mr-out-0.
+	// //
+	// i := 0
+	// for i < len(intermediate) {
+	// 	j := i + 1
+	// 	for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key {
+	// 		j++
+	// 	}
+	// 	values := []string{}
+	// 	for k := i; k < j; k++ {
+	// 		values = append(values, intermediate[k].Value)
+	// 	}
+	// 	output := reducef(intermediate[i].Key, values)
+
+	// 	// this is the correct format for each line of Reduce output.
+	// 	fmt.Fprintf(ofile, "%v %v\n", intermediate[i].Key, output)
+
+	// 	i = j
+	// }
+
+
+
+
+}
+
+
+func mapWork(task Task, mapf func(string, string) []KeyValue) {
+
+	filename := task.FileName
+	file, err := os.Open(filename)
+	intermediate := []KeyValue{}
+	if err != nil {
+		log.Fatalf("cannot open %v", filename)
+	}
+	content, err := ioutil.ReadAll(file)
+	if err != nil {
+		log.Fatalf("cannot read %v", filename)
+	}
+	file.Close()
+	kva := mapf(filename, string(content))
+	intermediate = append(intermediate, kva...)
+
+	outputfiles := make([]*os.File, task.Nreduce)
+	encoders := make([]*json.Encoder, task.Nreduce)
+	prefix := strings.Split(filename, ".txt")[0]
+
+	for i:=0;i<task.Nreduce;i++{
+		tempFileName := prefix + "_" + strconv.Itoa(i)
+		outputfiles[i], err = os.Create("./mr-tmp/"+tempFileName)
+		encoders[i] = json.NewEncoder(outputfiles[i])
+	}
+
+
+	for _, kv := range intermediate {
+		index := ihash(kv.Key)%task.Nreduce
+		encoders[index].Encode(kv)
+	}
+
+
+
+	for i := 0; i < task.Nreduce; i++ {
+		outputfiles[i].Close()
+	}
 }
 
 //

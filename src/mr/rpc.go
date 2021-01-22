@@ -15,7 +15,7 @@ import "strconv"
 //
 
 type ExampleArgs struct {
-	X int
+	FileName string
 }
 
 type ExampleReply struct {
