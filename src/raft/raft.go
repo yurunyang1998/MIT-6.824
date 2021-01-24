@@ -131,6 +131,10 @@ func (rf *Raft) readPersist(data []byte) {
 //
 type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
+	candidateNum int
+	candidataTerm int
+
+
 }
 
 //
@@ -139,6 +143,8 @@ type RequestVoteArgs struct {
 //
 type RequestVoteReply struct {
 	// Your data here (2A).
+	voteResult bool
+	followerNum int
 }
 
 //
@@ -232,7 +238,8 @@ func (rf *Raft) eventloop() bool {
 		select {
 		case rst <- rf.electionTimeOutCheckChannel:
 			{
-
+				rf.convert2Candidate()
+				
 			}
 		case rst <- rf.AppendEntryChannel:
 			{
@@ -250,9 +257,15 @@ func (rf *Raft) electionTimeOutCheck() {
 		for {
 			now := time.Now.UnixNano()
 			elaspe := (rf.lastBeatHeartTime - now) / int64(time.Millisecond)
-			if elaspe > rf.reelectionTime {
+			if elaspe > rf.ElectionTimeout {
 				//TODO:重新选举
-				rf.electionTimeOutCheckChannel <- true
+				if rf.State==0{  //leader
+					time.Sleep(1)  //TODO: Need to fix 
+				}
+				else{
+					rf.electionTimeOutCheckChannel <- true
+					time.Sleep(1)
+				}
 			}
 		}
 
@@ -288,12 +301,18 @@ func (rf *Raft) convert2Leader() {
 }
 
 func (rf *Raft) convert2Candidate() {
+	rf.CurrentTerm +=1 
+	rf.State=2
+	rf.Voted=0
+	rf.LastBeatHeartTime = time.Now().UnixNano()
+	rf.ElectionTimeout = setElectionTimeout()
 
 }
 
 func (rf *Raft) convert2Follower() {
 
 }
+
 
 //
 
