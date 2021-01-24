@@ -66,9 +66,11 @@ type Raft struct {
 	// state a Raft server must maintain.
 
 	State       int // 0 leader, 1 follower, 2 candidate
-	CurrentTerm int
+	CurrentTerm int	
+	peersNum 	int 
+	FollowersNum int
 	//serversNum                 int
-	NextIndex                   []int
+	NextIndex        []int
 	Voted                       bool
 	Log                         []logentry
 	LastBeatHeartTime           int64
@@ -152,6 +154,12 @@ type RequestVoteReply struct {
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
+	
+	
+
+
+
+
 }
 
 //
@@ -239,7 +247,27 @@ func (rf *Raft) eventloop() bool {
 		case rst <- rf.electionTimeOutCheckChannel:
 			{
 				rf.convert2Candidate()
-				
+				voteRequest RequestVoteArgs := RequestVoteArgs{rf.me, rf.CurrentTerm}
+				var voteReply  RequestVoteReply;
+				for i:0;i<rf.peersNum;i++ {
+					if i == rf.me{
+						continue
+					}
+					else{
+						rst := sendRequestVote(i, &RequestVoteArgs, &RequestVoteReply)
+						if rst==true{
+							if RequestVoteReply.voteResult == true{
+								rf.FollowersNum += 1
+							}
+						}
+					}
+				}
+				if rf.FollowersNum> rf.peersNum/2 {
+					rf.convert2Leader() 
+					//TODO : be leader
+				}
+
+
 			}
 		case rst <- rf.AppendEntryChannel:
 			{
@@ -289,7 +317,8 @@ func (rf *Raft) initialization() {
 	rf.LastBeatHeartTime = 0
 	rf.ElectionTimeout = setElectionTimeout()          //TODO: add a function to create random time
 	rf.ElectionTimeOutCheckChannel = make(chan int, 1) // TODO : I don't know  if the channel should have buffer
-
+	rf.peersNum = len(rf.peers)
+	rf.FollowersNum = 0
 }
 
 func (rf *Raft) convert2Leader() {
@@ -306,7 +335,7 @@ func (rf *Raft) convert2Candidate() {
 	rf.Voted=0
 	rf.LastBeatHeartTime = time.Now().UnixNano()
 	rf.ElectionTimeout = setElectionTimeout()
-
+	rf.FollowersNum = 0 
 }
 
 func (rf *Raft) convert2Follower() {
