@@ -66,8 +66,8 @@ type Raft struct {
 	// state a Raft server must maintain.
 
 	State       int // 0 leader, 1 follower, 2 candidate
-	CurrentTerm int	
-	peersNum 	int 
+	CurrentTerm int
+	peersNum 	int
 	FollowersNum int
 	lastLogIndex int
 	lastLogTerm int
@@ -88,6 +88,9 @@ func (rf *Raft) GetState() (int, bool) {
 	var term int
 	var isleader bool
 	// Your code here (2A).
+	term = rf.CurrentTerm
+	isleader = if rf.State==0
+
 	return term, isleader
 }
 
@@ -261,21 +264,31 @@ func (rf *Raft) eventloop() bool {
 				rf.convert2Candidate()
 				voteRequest RequestVoteArgs := RequestVoteArgs{rf.me, rf.CurrentTerm}
 				var voteReply  RequestVoteReply;
+				wg sync.WaitGroup
 				for i:0;i<rf.peersNum;i++ {
-					if i == rf.me{
-						continue
-					}
-					else{
-						rst := sendRequestVote(i, &RequestVoteArgs, &RequestVoteReply)
-						if rst==true{
-							if RequestVoteReply.voteResult == true{
-								rf.FollowersNum += 1
+					wg.add(1)
+					go func(){
+
+						if i == rf.me{
+							return
+						}
+						else{
+							rst := sendRequestVote(i, &RequestVoteArgs, &RequestVoteReply)
+							if rst==true{
+								if RequestVoteReply.voteResult == true{
+									rf.mu.Lock()
+									rf.FollowersNum += 1
+									rf.mu.Unlock()
+								}
 							}
 						}
-					}
+						wg.Done()
+					}()
+
 				}
+				wg.Wait()
 				if rf.FollowersNum> rf.peersNum/2 {
-					rf.convert2Leader() 
+					rf.convert2Leader()
 					//TODO : be leader
 				}
 
@@ -298,18 +311,27 @@ func (rf *Raft) electionTimeOutCheck() {
 			now := time.Now.UnixNano()
 			elaspe := (rf.lastBeatHeartTime - now) / int64(time.Millisecond)
 			if elaspe > rf.ElectionTimeout {
-				//TODO:重新选举
 				if rf.State==0{  //leader
-					time.Sleep(1)  //TODO: Need to fix 
+
 				}
 				else{
 					rf.electionTimeOutCheckChannel <- true
-					time.Sleep(1)
+
 				}
 			}
 		}
 
 	}()
+
+}
+
+
+func entryBeat(){
+	
+
+}
+
+func entryReceive(){
 
 }
 
@@ -334,6 +356,9 @@ func (rf *Raft) initialization() {
 }
 
 func (rf *Raft) convert2Leader() {
+	if(rf.state == 1){
+		return
+	}
 	rf.State = 0
 	rf.CurrentTerm++
 	rf.Voted = -1
@@ -342,12 +367,12 @@ func (rf *Raft) convert2Leader() {
 }
 
 func (rf *Raft) convert2Candidate() {
-	rf.CurrentTerm +=1 
+	rf.CurrentTerm +=1
 	rf.State=2
-	rf.Voted=-1 
+	rf.Voted=-1
 	rf.LastBeatHeartTime = time.Now().UnixNano()
 	rf.ElectionTimeout = setElectionTimeout()
-	rf.FollowersNum = 0 
+	rf.FollowersNum = 0
 }
 
 func (rf *Raft) convert2Follower() {
@@ -377,6 +402,9 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.me = me
 
 	// Your initialization code here (2A, 2B, 2C).
+	rf.initialization()
+	rf.electionTimeOutCheck()
+
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
