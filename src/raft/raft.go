@@ -69,6 +69,8 @@ type Raft struct {
 	CurrentTerm int	
 	peersNum 	int 
 	FollowersNum int
+	lastLogIndex int
+	lastLogTerm int
 	//serversNum                 int
 	NextIndex        []int
 	Voted                       bool
@@ -135,7 +137,8 @@ type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
 	candidateNum int
 	candidataTerm int
-
+	lastLogIndex int
+	lastLogTerm int
 
 }
 
@@ -154,12 +157,21 @@ type RequestVoteReply struct {
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
-	
-	
+	RequestVoteReply->followerNum = rf.me
+	if(rf.Voted != -1){
+		if RequestVoteArgs->candidataTerm >= rf.CurrentTerm {
+			if RequestVoteArgs->lastLogTerm >= rf.lastLogTerm{
+				if RequestVoteArgs->lastLogIndex >= rf.lastLogIndex{
+					RequestVoteReply->voteResult = true
+					rf.Voted = RequestVoteArgs->candidateNum
+					return
+				}
+			}
+		}
+	}
 
-
-
-
+	RequestVoteReply->voteResult=false
+	return
 }
 
 //
@@ -312,7 +324,7 @@ func (rf *Raft) initialization() {
 	rf.State = 1 //follower
 	rf.CurrentTerm = 0
 	// rf.NextIndex
-	rf.Voted = 0
+	rf.Voted = -1
 	// rf.Log
 	rf.LastBeatHeartTime = 0
 	rf.ElectionTimeout = setElectionTimeout()          //TODO: add a function to create random time
@@ -324,7 +336,7 @@ func (rf *Raft) initialization() {
 func (rf *Raft) convert2Leader() {
 	rf.State = 0
 	rf.CurrentTerm++
-	rf.Voted = 0
+	rf.Voted = -1
 	rf.LastBeatHeartTime = 0
 	rf.ElectionTimeout = setElectionTimeout()
 }
@@ -332,7 +344,7 @@ func (rf *Raft) convert2Leader() {
 func (rf *Raft) convert2Candidate() {
 	rf.CurrentTerm +=1 
 	rf.State=2
-	rf.Voted=0
+	rf.Voted=-1 
 	rf.LastBeatHeartTime = time.Now().UnixNano()
 	rf.ElectionTimeout = setElectionTimeout()
 	rf.FollowersNum = 0 
