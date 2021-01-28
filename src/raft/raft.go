@@ -40,15 +40,26 @@ import (
 // snapshots) on the applyCh; at that point you can add fields to
 // ApplyMsg, but set CommandValid to false for these other uses.
 //
-type ApplyMsg struct {
+
+
+type entry struct{
+	term int
+	commond string
+}
+
+type applyMsg struct {
 	CommandValid bool
 	Command      interface{}
 	CommandIndex int
 }
 
-type logentry struct {
+type appendEntry struct {
 	term    int
-	command string
+	leaderId int
+	prevLogIndex int
+	prevLogTerm int
+	entries []entry
+	leaderCommit int
 }
 
 //
@@ -88,6 +99,8 @@ func (rf *Raft) GetState() (int, bool) {
 	var term int
 	var isleader bool
 	// Your code here (2A).
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	term = rf.CurrentTerm
 	isleader = if rf.State==0
 
@@ -289,7 +302,10 @@ func (rf *Raft) eventloop() bool {
 				wg.Wait()
 				if rf.FollowersNum> rf.peersNum/2 {
 					rf.convert2Leader()
-					//TODO : be leader
+
+
+
+
 				}
 
 
@@ -326,14 +342,63 @@ func (rf *Raft) electionTimeOutCheck() {
 }
 
 
-func entryBeat(){
-	
-
+func (rf *Raft) sendAppendEntry(server int, args *logentry, reply * applyMsg) bool {
+	ok := rf.peers[server].Call("Raft.EntryReceive", args, reply)
+	return ok
 }
 
-func entryReceive(){
-
+func (rf * Raft) EntryReceive(args *logentry, reply * applyMsg){
+	now := time.Now().Nanosecond()
+	rf.LastBeatHeartTime = now
 }
+
+
+func (rf *Raft) broadBeat(){
+	for{
+		rf.mu.Lock()
+		term, isleader := rf.GetState()
+		rf.mu.Unlock()
+		if isleader == false{
+			return
+		}
+		//TODO: get laster appendEntry info
+		
+		args := appendEntry{term:rf.CurrentTerm, 
+									   leaderId: rf.me,
+									prevLogIndex  : 0,
+									prevLogTerm :0 ,
+									entries: entry[0],
+									leaderCommit: rf.lastLogIndex,
+									}
+									
+		var reply applyMsg
+		
+		for i=0;i<rf.peersNum;i++{
+			if i==rf.me{
+				continue
+			}
+			go func() {
+				rst := rf.sendAppendEntry(i, &args, &reply)
+				if rst==false{
+					//TODO: peer failed
+				}else if{
+					//TODO: 判断对端term是否大于自己的term
+					// 如果 结果为 false，则转换为follower
+				}
+
+
+
+
+			}
+		}
+		
+
+	}
+}
+
+
+
+
 
 func setElectionTimeout() int {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
