@@ -41,24 +41,28 @@ import (
 // ApplyMsg, but set CommandValid to false for these other uses.
 //
 
-
-type entry struct{
-	term int
+type entry struct {
+	term    int
 	commond string
 }
 
-type applyMsg struct {
+type ApplyMsg struct {
 	CommandValid bool
 	Command      interface{}
 	CommandIndex int
 }
 
+type appendEntryReply struct {
+	term int
+	rst  bool
+}
+
 type appendEntry struct {
-	term    int
-	leaderId int
+	term         int
+	leaderId     int
 	prevLogIndex int
-	prevLogTerm int
-	entries []entry
+	prevLogTerm  int
+	entries      []entry
 	leaderCommit int
 }
 
@@ -76,16 +80,16 @@ type Raft struct {
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 
-	State       int // 0 leader, 1 follower, 2 candidate
-	CurrentTerm int
-	peersNum 	int
+	State        int // 0 leader, 1 follower, 2 candidate
+	CurrentTerm  int
+	peersNum     int
 	FollowersNum int
 	lastLogIndex int
-	lastLogTerm int
+	lastLogTerm  int
 	//serversNum                 int
-	NextIndex        []int
-	Voted                       bool
-	Log                         []logentry
+	NextIndex                   []int
+	Voted                       int
+	Log                         []entry
 	LastBeatHeartTime           int64
 	ElectionTimeout             int64
 	ElectionTimeOutCheckChannel chan bool
@@ -102,8 +106,12 @@ func (rf *Raft) GetState() (int, bool) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	term = rf.CurrentTerm
-	isleader = if rf.State==0
-
+	// isleader = if rf.State==0
+	if rf.State == 0 {
+		isleader = true
+	} else {
+		isleader = false
+	}
 	return term, isleader
 }
 
@@ -151,11 +159,10 @@ func (rf *Raft) readPersist(data []byte) {
 //
 type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
-	candidateNum int
+	candidateNum  int
 	candidataTerm int
-	lastLogIndex int
-	lastLogTerm int
-
+	lastLogIndex  int
+	lastLogTerm   int
 }
 
 //
@@ -164,7 +171,7 @@ type RequestVoteArgs struct {
 //
 type RequestVoteReply struct {
 	// Your data here (2A).
-	voteResult bool
+	voteResult  bool
 	followerNum int
 }
 
@@ -173,20 +180,20 @@ type RequestVoteReply struct {
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
-	RequestVoteReply->followerNum = rf.me
-	if(rf.Voted != -1){
-		if RequestVoteArgs->candidataTerm >= rf.CurrentTerm {
-			if RequestVoteArgs->lastLogTerm >= rf.lastLogTerm{
-				if RequestVoteArgs->lastLogIndex >= rf.lastLogIndex{
-					RequestVoteReply->voteResult = true
-					rf.Voted = RequestVoteArgs->candidateNum
+	reply.followerNum = rf.me
+	if rf.Voted != -1 {
+		if args.candidataTerm >= rf.CurrentTerm {
+			if args.lastLogTerm >= rf.lastLogTerm {
+				if args.lastLogIndex >= rf.lastLogIndex {
+					reply.voteResult = true
+					rf.Voted = args.candidateNum
 					return
 				}
 			}
 		}
 	}
 
-	RequestVoteReply->voteResult=false
+	reply.voteResult = false
 	return
 }
 
@@ -272,48 +279,39 @@ func (rf *Raft) killed() bool {
 func (rf *Raft) eventloop() bool {
 	for {
 		select {
-		case rst <- rf.electionTimeOutCheckChannel:
-			{
-				rf.convert2Candidate()
-				voteRequest RequestVoteArgs := RequestVoteArgs{rf.me, rf.CurrentTerm}
-				var voteReply  RequestVoteReply;
-				wg sync.WaitGroup
-				for i:0;i<rf.peersNum;i++ {
-					wg.add(1)
-					go func(){
+		case <-rf.ElectionTimeOutCheckChannel:
+			rf.convert2Candidate()
+			voteRequest := RequestVoteArgs{rf.me, rf.CurrentTerm, 0, 0}
+			var voteReply RequestVoteReply
+			var wg sync.WaitGroup
+			for i := 0; i < rf.peersNum; i++ {
+				wg.Add(1)
+				go func() {
 
-						if i == rf.me{
-							return
-						}
-						else{
-							rst := sendRequestVote(i, &RequestVoteArgs, &RequestVoteReply)
-							if rst==true{
-								if RequestVoteReply.voteResult == true{
-									rf.mu.Lock()
-									rf.FollowersNum += 1
-									rf.mu.Unlock()
-								}
+					if i == rf.me {
+						return
+					} else {
+						rst := rf.sendRequestVote(i, &voteRequest, &voteReply)
+						if rst == true {
+							if voteReply.voteResult == true {
+								rf.mu.Lock()
+								rf.FollowersNum += 1
+								rf.mu.Unlock()
 							}
 						}
-						wg.Done()
-					}()
-
-				}
-				wg.Wait()
-				if rf.FollowersNum> rf.peersNum/2 {
-					rf.convert2Leader()
-
-
-
-
-				}
-
+					}
+					wg.Done()
+				}()
 
 			}
-		case rst <- rf.AppendEntryChannel:
-			{
+			wg.Wait()
+			if rf.FollowersNum > rf.peersNum/2 {
+				rf.convert2Leader()
 
 			}
+
+		case <-rf.AppendEntryChannel:
+
 		}
 	}
 
@@ -324,14 +322,13 @@ func (rf *Raft) eventloop() bool {
 func (rf *Raft) electionTimeOutCheck() {
 	go func() {
 		for {
-			now := time.Now.UnixNano()
-			elaspe := (rf.lastBeatHeartTime - now) / int64(time.Millisecond)
+			now := time.Now().UnixNano()
+			elaspe := (rf.LastBeatHeartTime - now) / int64(time.Millisecond)
 			if elaspe > rf.ElectionTimeout {
-				if rf.State==0{  //leader
+				if rf.State == 0 { //leader
 
-				}
-				else{
-					rf.electionTimeOutCheckChannel <- true
+				} else {
+					rf.ElectionTimeOutCheckChannel <- true
 
 				}
 			}
@@ -341,69 +338,79 @@ func (rf *Raft) electionTimeOutCheck() {
 
 }
 
-
-func (rf *Raft) sendAppendEntry(server int, args *logentry, reply * applyMsg) bool {
+func (rf *Raft) sendAppendEntry(server int, args *entry, reply *appendEntryReply) bool {
 	ok := rf.peers[server].Call("Raft.EntryReceive", args, reply)
 	return ok
 }
 
-func (rf * Raft) EntryReceive(args *logentry, reply * applyMsg){
+func (rf *Raft) EntryReceive(args *appendEntry, reply *appendEntryReply) {
 	now := time.Now().Nanosecond()
-	rf.LastBeatHeartTime = now
+	rf.LastBeatHeartTime = int64(now)
+	if args.term < rf.CurrentTerm {
+		reply.term = rf.CurrentTerm
+		reply.rst = false
+		return
+	} else {
+		reply.term = rf.CurrentTerm
+		reply.rst = true
+	}
+
+	//TODO :判断数据是否一致
+
 }
 
-
-func (rf *Raft) broadBeat(){
-	for{
+func (rf *Raft) broadBeat() {
+	for {
 		rf.mu.Lock()
 		term, isleader := rf.GetState()
 		rf.mu.Unlock()
-		if isleader == false{
+		if isleader == false {
 			return
 		}
 		//TODO: get laster appendEntry info
-		
-		args := appendEntry{term:rf.CurrentTerm, 
-									   leaderId: rf.me,
-									prevLogIndex  : 0,
-									prevLogTerm :0 ,
-									entries: entry[0],
-									leaderCommit: rf.lastLogIndex,
-									}
-									
+
+		args := appendEntry{term: rf.CurrentTerm,
+			leaderId:     rf.me,
+			prevLogIndex: 0,
+			prevLogTerm:  0,
+			entries:      rf.Log[0],
+			leaderCommit: rf.lastLogIndex,
+		}
+
 		var reply applyMsg
-		
-		for i=0;i<rf.peersNum;i++{
-			if i==rf.me{
+
+		for i := 0; i < rf.peersNum; i++ {
+			if i == rf.me {
 				continue
 			}
 			go func() {
 				rst := rf.sendAppendEntry(i, &args, &reply)
-				if rst==false{
+				if rst == false {
 					//TODO: peer failed
-				}else if{
+				} else {
 					//TODO: 判断对端term是否大于自己的term
 					// 如果 结果为 false，则转换为follower
+
+					if reply.rst != true {
+						if reply.term > rf.CurrentTerm {
+							rf.convert2Follower()
+							return
+						} else {
+							//TODO: 重新发送appendEntry
+						}
+					}
 				}
 
-
-
-
-			}
+			}()
 		}
-		
 
 	}
 }
 
-
-
-
-
-func setElectionTimeout() int {
+func setElectionTimeout() int64 {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	randomTime := r.Intn(150) + 150
-	return randomTime
+	return int64(randomTime)
 }
 
 func (rf *Raft) initialization() {
@@ -421,7 +428,7 @@ func (rf *Raft) initialization() {
 }
 
 func (rf *Raft) convert2Leader() {
-	if(rf.state == 1){
+	if rf.state == 1 {
 		return
 	}
 	rf.State = 0
@@ -432,9 +439,9 @@ func (rf *Raft) convert2Leader() {
 }
 
 func (rf *Raft) convert2Candidate() {
-	rf.CurrentTerm +=1
-	rf.State=2
-	rf.Voted=-1
+	rf.CurrentTerm += 1
+	rf.State = 2
+	rf.Voted = -1
 	rf.LastBeatHeartTime = time.Now().UnixNano()
 	rf.ElectionTimeout = setElectionTimeout()
 	rf.FollowersNum = 0
@@ -443,7 +450,6 @@ func (rf *Raft) convert2Candidate() {
 func (rf *Raft) convert2Follower() {
 
 }
-
 
 //
 
@@ -469,7 +475,6 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// Your initialization code here (2A, 2B, 2C).
 	rf.initialization()
 	rf.electionTimeOutCheck()
-
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
