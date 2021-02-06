@@ -62,7 +62,7 @@ type appendEntry struct {
 	leaderId     int
 	prevLogIndex int
 	prevLogTerm  int
-	entries      []entry
+	entries      entry
 	leaderCommit int
 }
 
@@ -338,7 +338,7 @@ func (rf *Raft) electionTimeOutCheck() {
 
 }
 
-func (rf *Raft) sendAppendEntry(server int, args *entry, reply *appendEntryReply) bool {
+func (rf *Raft) sendAppendEntry(server int, args *appendEntry, reply *appendEntryReply) bool {
 	ok := rf.peers[server].Call("Raft.EntryReceive", args, reply)
 	return ok
 }
@@ -369,7 +369,7 @@ func (rf *Raft) broadBeat() {
 		}
 		//TODO: get laster appendEntry info
 
-		args := appendEntry{term: rf.CurrentTerm,
+		args := appendEntry{term: term,
 			leaderId:     rf.me,
 			prevLogIndex: 0,
 			prevLogTerm:  0,
@@ -377,7 +377,7 @@ func (rf *Raft) broadBeat() {
 			leaderCommit: rf.lastLogIndex,
 		}
 
-		var reply applyMsg
+		var reply appendEntryReply
 
 		for i := 0; i < rf.peersNum; i++ {
 			if i == rf.me {
@@ -421,14 +421,14 @@ func (rf *Raft) initialization() {
 	rf.Voted = -1
 	// rf.Log
 	rf.LastBeatHeartTime = 0
-	rf.ElectionTimeout = setElectionTimeout()          //TODO: add a function to create random time
-	rf.ElectionTimeOutCheckChannel = make(chan int, 1) // TODO : I don't know  if the channel should have buffer
+	rf.ElectionTimeout = setElectionTimeout()           //TODO: add a function to create random time
+	rf.ElectionTimeOutCheckChannel = make(chan bool, 1) // TODO : I don't know  if the channel should have buffer
 	rf.peersNum = len(rf.peers)
 	rf.FollowersNum = 0
 }
 
 func (rf *Raft) convert2Leader() {
-	if rf.state == 1 {
+	if rf.State == 1 {
 		return
 	}
 	rf.State = 0
