@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"fmt"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -42,8 +43,8 @@ import (
 //
 
 type entry struct {
-	term    int
-	commond string
+	Term    int
+	Commond string
 }
 
 type ApplyMsg struct {
@@ -53,17 +54,17 @@ type ApplyMsg struct {
 }
 
 type appendEntryReply struct {
-	term int
-	rst  bool
+	Term int
+	Rst  bool
 }
 
 type appendEntry struct {
-	term         int
-	leaderId     int
-	prevLogIndex int
-	prevLogTerm  int
-	entries      entry
-	leaderCommit int
+	Term         int
+	LeaderId     int
+	PrevLogIndex int
+	PrevLogTerm  int
+	Entries      entry
+	LeaderCommit int
 }
 
 //
@@ -84,8 +85,8 @@ type Raft struct {
 	CurrentTerm  int
 	peersNum     int
 	FollowersNum int
-	lastLogIndex int
-	lastLogTerm  int
+	LastLogIndex int
+	LastLogTerm  int
 	//serversNum                 int
 	NextIndex                   []int
 	Voted                       int
@@ -159,10 +160,10 @@ func (rf *Raft) readPersist(data []byte) {
 //
 type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
-	candidateNum  int
-	candidataTerm int
-	lastLogIndex  int
-	lastLogTerm   int
+	CandidateNum  int
+	CandidataTerm int
+	LastLogIndex  int
+	LastLogTerm   int
 }
 
 //
@@ -171,8 +172,8 @@ type RequestVoteArgs struct {
 //
 type RequestVoteReply struct {
 	// Your data here (2A).
-	voteResult  bool
-	followerNum int
+	VoteResult  bool
+	FollowerNum int
 }
 
 //
@@ -180,20 +181,20 @@ type RequestVoteReply struct {
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
-	reply.followerNum = rf.me
+	reply.FollowerNum = rf.me
 	if rf.Voted != -1 {
-		if args.candidataTerm >= rf.CurrentTerm {
-			if args.lastLogTerm >= rf.lastLogTerm {
-				if args.lastLogIndex >= rf.lastLogIndex {
-					reply.voteResult = true
-					rf.Voted = args.candidateNum
+		if args.CandidataTerm >= rf.CurrentTerm {
+			if args.LastLogTerm >= rf.LastLogTerm {
+				if args.LastLogIndex >= rf.LastLogIndex {
+					reply.VoteResult = true
+					rf.Voted = args.CandidateNum
 					return
 				}
 			}
 		}
 	}
 
-	reply.voteResult = false
+	reply.VoteResult = false
 	return
 }
 
@@ -242,7 +243,7 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 //
 // the first return value is the index that the command will appear at
 // if it's ever committed. the second return value is the current
-// term. the third return value is true if this server believes it is
+// term. the third return value is/*  */ true if this server believes it is
 // the leader.
 //
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
@@ -277,23 +278,27 @@ func (rf *Raft) killed() bool {
 }
 
 func (rf *Raft) eventloop() bool {
+	fmt.Printf("%d begin eventloop\n",rf.me)
 	for {
 		select {
 		case <-rf.ElectionTimeOutCheckChannel:
+			//fmt.Printf("Election Time out\n")
 			rf.convert2Candidate()
 			voteRequest := RequestVoteArgs{rf.me, rf.CurrentTerm, 0, 0}
 			var voteReply RequestVoteReply
 			var wg sync.WaitGroup
-			for i := 0; i < rf.peersNum; i++ {
+			for i := 0; i < rf.peersNum-1; i++ {
 				wg.Add(1)
-				go func() {
-
+				go func(i int) {
 					if i == rf.me {
 						return
 					} else {
 						rst := rf.sendRequestVote(i, &voteRequest, &voteReply)
+
+						fmt.Printf("send request vote to %d\n", i)
+
 						if rst == true {
-							if voteReply.voteResult == true {
+							if voteReply.VoteResult == true {
 								rf.mu.Lock()
 								rf.FollowersNum += 1
 								rf.mu.Unlock()
@@ -301,11 +306,11 @@ func (rf *Raft) eventloop() bool {
 						}
 					}
 					wg.Done()
-				}()
+				}(i)
 
 			}
 			wg.Wait()
-			if rf.FollowersNum > rf.peersNum/2 {
+			if rf.FollowersNum >= rf.peersNum/2 {
 				rf.convert2Leader()
 
 			}
@@ -323,9 +328,11 @@ func (rf *Raft) electionTimeOutCheck() {
 	go func() {
 		for {
 			now := time.Now().UnixNano()
-			elaspe := (rf.LastBeatHeartTime - now) / int64(time.Millisecond)
+			elaspe := (now - rf.LastBeatHeartTime) / int64(time.Millisecond)
+			//fmt.Println(elaspe, rf.ElectionTimeout)
 			if elaspe > rf.ElectionTimeout {
-				if rf.State == 0 { //leader
+				//fmt.Printf("elasp > rf.ElectionTimeout\n")
+				if rf.State == 0 || rf.State==2 { //leader
 
 				} else {
 					rf.ElectionTimeOutCheckChannel <- true
@@ -344,7 +351,7 @@ func (rf *Raft) sendAppendEntry(server int, args *appendEntry, reply *appendEntr
 }
 
 func (rf *Raft) EntryReceive(args *appendEntry, reply *appendEntryReply) {
-	now := time.Now().Nanosecond()
+	now := time.Now().UnixNano()
 	rf.LastBeatHeartTime = int64(now)
 	if args.term < rf.CurrentTerm {
 		reply.term = rf.CurrentTerm
@@ -374,7 +381,7 @@ func (rf *Raft) broadBeat() {
 			prevLogIndex: 0,
 			prevLogTerm:  0,
 			entries:      rf.Log[0],
-			leaderCommit: rf.lastLogIndex,
+			leaderCommit: rf.LastLogIndex,
 		}
 
 		var reply appendEntryReply
@@ -420,11 +427,13 @@ func (rf *Raft) initialization() {
 	// rf.NextIndex
 	rf.Voted = -1
 	// rf.Log
-	rf.LastBeatHeartTime = 0
+	rf.LastBeatHeartTime = time.Now().UnixNano()
 	rf.ElectionTimeout = setElectionTimeout()           //TODO: add a function to create random time
 	rf.ElectionTimeOutCheckChannel = make(chan bool, 1) // TODO : I don't know  if the channel should have buffer
 	rf.peersNum = len(rf.peers)
 	rf.FollowersNum = 0
+
+	go rf.eventloop()
 }
 
 func (rf *Raft) convert2Leader() {
@@ -434,7 +443,7 @@ func (rf *Raft) convert2Leader() {
 	rf.State = 0
 	rf.CurrentTerm++
 	rf.Voted = -1
-	rf.LastBeatHeartTime = 0
+	rf.LastBeatHeartTime = time.Now().UnixNano()
 	rf.ElectionTimeout = setElectionTimeout()
 }
 
