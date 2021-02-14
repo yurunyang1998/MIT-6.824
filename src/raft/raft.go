@@ -182,7 +182,7 @@ type RequestVoteReply struct {
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
 	reply.FollowerNum = rf.me
-	if rf.Voted != -1 {
+	if rf.Voted == -1 {
 		if args.CandidataTerm >= rf.CurrentTerm {
 			if args.LastLogTerm >= rf.LastLogTerm {
 				if args.LastLogIndex >= rf.LastLogIndex {
@@ -293,9 +293,10 @@ func (rf *Raft) eventloop() bool {
 					if i == rf.me {
 						return
 					} else {
+						//fmt.Println(voteRequest)
 						rst := rf.sendRequestVote(i, &voteRequest, &voteReply)
 
-						fmt.Printf("send request vote to %d\n", i)
+						//fmt.Printf("send request vote to %d\n", i)
 
 						if rst == true {
 							if voteReply.VoteResult == true {
@@ -314,7 +315,6 @@ func (rf *Raft) eventloop() bool {
 				rf.convert2Leader()
 
 			}
-
 		case <-rf.AppendEntryChannel:
 
 		}
@@ -353,13 +353,15 @@ func (rf *Raft) sendAppendEntry(server int, args *appendEntry, reply *appendEntr
 func (rf *Raft) EntryReceive(args *appendEntry, reply *appendEntryReply) {
 	now := time.Now().UnixNano()
 	rf.LastBeatHeartTime = int64(now)
-	if args.term < rf.CurrentTerm {
-		reply.term = rf.CurrentTerm
-		reply.rst = false
+	//fmt.Println(args)
+	if args.Term < rf.CurrentTerm {
+		reply.Term = rf.CurrentTerm
+		reply.Rst = false
 		return
 	} else {
-		reply.term = rf.CurrentTerm
-		reply.rst = true
+		reply.Term = rf.CurrentTerm
+		rf.CurrentTerm = args.Term
+		reply.Rst = true
 	}
 
 	//TODO :判断数据是否一致
@@ -368,20 +370,21 @@ func (rf *Raft) EntryReceive(args *appendEntry, reply *appendEntryReply) {
 
 func (rf *Raft) broadBeat() {
 	for {
-		rf.mu.Lock()
 		term, isleader := rf.GetState()
-		rf.mu.Unlock()
 		if isleader == false {
-			return
+			continue
 		}
 		//TODO: get laster appendEntry info
 
-		args := appendEntry{term: term,
-			leaderId:     rf.me,
-			prevLogIndex: 0,
-			prevLogTerm:  0,
-			entries:      rf.Log[0],
-			leaderCommit: rf.LastLogIndex,
+		args := appendEntry{Term: term,
+			LeaderId:     rf.me,
+			PrevLogIndex: 0,
+			PrevLogTerm:  0,
+			Entries:      entry{
+				Term:    rf.LastLogTerm,
+				Commond: "test",
+			},
+			LeaderCommit: rf.LastLogIndex,
 		}
 
 		var reply appendEntryReply
@@ -390,7 +393,7 @@ func (rf *Raft) broadBeat() {
 			if i == rf.me {
 				continue
 			}
-			go func() {
+			go func(i int ) {
 				rst := rf.sendAppendEntry(i, &args, &reply)
 				if rst == false {
 					//TODO: peer failed
@@ -398,8 +401,8 @@ func (rf *Raft) broadBeat() {
 					//TODO: 判断对端term是否大于自己的term
 					// 如果 结果为 false，则转换为follower
 
-					if reply.rst != true {
-						if reply.term > rf.CurrentTerm {
+					if reply.Rst != true {
+						if reply.Term > rf.CurrentTerm {
 							rf.convert2Follower()
 							return
 						} else {
@@ -408,7 +411,7 @@ func (rf *Raft) broadBeat() {
 					}
 				}
 
-			}()
+			}(i)
 		}
 
 	}
@@ -445,6 +448,7 @@ func (rf *Raft) convert2Leader() {
 	rf.Voted = -1
 	rf.LastBeatHeartTime = time.Now().UnixNano()
 	rf.ElectionTimeout = setElectionTimeout()
+	rf.broadBeat()
 }
 
 func (rf *Raft) convert2Candidate() {
